@@ -79,7 +79,8 @@ def rcppo(env_fn, actor_critic=core.RCPPOActorCritic, ac_kwargs=dict(), seed=0,
           steps_per_epoch=30000, epochs=333, gamma=0.99, gamma_reach=0.99, clip_ratio=0.2,
           pi_lr=3e-4, vf_lr=1e-3, train_pi_iters=80, train_v_iters=80, lam=0.97,
           max_ep_len=1000, target_kl=0.01, z_min=-100, z_max=1000,
-          logger_kwargs=dict(), save_freq=10, goal_fn=None, avoid_fn=None, cost_fn=None):
+          logger_kwargs=dict(), save_freq=10, goal_fn=None, avoid_fn=None, cost_fn=None,
+          run_phase2=False):
 
     setup_pytorch_for_mpi()
     logger = EpochLogger(**logger_kwargs)
@@ -239,6 +240,23 @@ def rcppo(env_fn, actor_critic=core.RCPPOActorCritic, ac_kwargs=dict(), seed=0,
         logger.log_tabular('Time', time.time()-start_time)
         logger.dump_tabular()
 
+    if run_phase2 and proc_id() == 0:
+        logger.log('\n\n===== Phase 2: Fine-tuning and Finding Optimal z* =====\n')
+        logger.log('Fine-tuning value function with deterministic policy...')
+        ac = finetune_value_function(ac, env_fn, goal_fn, avoid_fn, cost_fn, C_const,
+                                     num_rollouts=100, max_ep_len=max_ep_len)
+        logger.log('Phase 2 fine-tuning complete!')
+
+        logger.log('Testing optimal z* on sample states...')
+        test_env = env_fn()
+        for i in range(5):
+            x0 = test_env.reset()
+            z_star = find_optimal_z(ac, x0, goal_fn, avoid_fn, z_min, z_max)
+            logger.log(f'State {i}: Optimal z* = {z_star:.2f}')
+        logger.log('Phase 2 complete!\n')
+
+    return ac
+
 
 def finetune_value_function(ac, env_fn, goal_fn, avoid_fn, cost_fn, C_const,
                             num_rollouts=100, max_ep_len=1000, vf_lr=1e-3, train_v_iters=50):
@@ -354,4 +372,4 @@ if __name__ == '__main__':
           ac_kwargs=dict(hidden_sizes=[args.hid]*args.l), gamma=args.gamma,
           gamma_reach=args.gamma_reach, seed=args.seed, steps_per_epoch=args.steps,
           epochs=args.epochs, z_min=args.z_min, z_max=args.z_max,
-          logger_kwargs=logger_kwargs)
+          run_phase2=args.phase2, logger_kwargs=logger_kwargs)
