@@ -151,6 +151,8 @@ class RCPPOActorCritic(nn.Module):
             self.pi = MLPGaussianActor(aug_obs_dim, action_space.shape[0], hidden_sizes, activation)
         elif isinstance(action_space, Discrete):
             self.pi = MLPCategoricalActor(aug_obs_dim, action_space.n, hidden_sizes, activation)
+        else:
+            raise NotImplementedError(f"Unsupported action space type: {type(action_space)}")
 
         self.v_reach = MLPCritic(aug_obs_dim, hidden_sizes, activation)
 
