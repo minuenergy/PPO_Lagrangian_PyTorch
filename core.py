@@ -108,7 +108,7 @@ class MLPCritic(nn.Module):
 class MLPActorCritic(nn.Module):
 
 
-    def __init__(self, observation_space, action_space, 
+    def __init__(self, observation_space, action_space,
                  hidden_sizes=(64,64), activation=nn.Tanh):
         super().__init__()
 
@@ -135,3 +135,41 @@ class MLPActorCritic(nn.Module):
 
     def act(self, obs):
         return self.step(obs)[0]
+
+
+class RCPPOActorCritic(nn.Module):
+    """Actor-Critic for RC-PPO with augmented state (x, y, z)"""
+
+    def __init__(self, observation_space, action_space,
+                 hidden_sizes=(64,64), activation=nn.Tanh):
+        super().__init__()
+
+        obs_dim = observation_space.shape[0]
+        aug_obs_dim = obs_dim + 2  # x, y, z
+
+        if isinstance(action_space, Box):
+            self.pi = MLPGaussianActor(aug_obs_dim, action_space.shape[0], hidden_sizes, activation)
+        elif isinstance(action_space, Discrete):
+            self.pi = MLPCategoricalActor(aug_obs_dim, action_space.n, hidden_sizes, activation)
+
+        self.v_reach = MLPCritic(aug_obs_dim, hidden_sizes, activation)
+
+    def step(self, obs_aug):
+        with torch.no_grad():
+            pi = self.pi._distribution(obs_aug)
+            a = pi.sample()
+            logp_a = self.pi._log_prob_from_distribution(pi, a)
+            v = self.v_reach(obs_aug)
+        return a.numpy(), v.numpy(), logp_a.numpy()
+
+    def act(self, obs_aug):
+        return self.step(obs_aug)[0]
+
+    def act_deterministic(self, obs_aug):
+        with torch.no_grad():
+            pi = self.pi._distribution(obs_aug)
+            if isinstance(pi, Normal):
+                a = pi.mean
+            else:
+                a = torch.argmax(pi.probs, dim=-1)
+        return a.numpy()
