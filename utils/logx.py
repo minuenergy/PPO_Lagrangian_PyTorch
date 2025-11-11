@@ -2,7 +2,7 @@
 
 Some simple logging functionality, inspired by rllab's logging.
 
-Logs to a tab-separated-values file (path/to/output_directory/progress.txt)
+Logs to a CSV file (path/to/output_directory/progress.csv)
 
 """
 import json
@@ -13,6 +13,7 @@ import tensorflow as tf
 import torch
 import os.path as osp, time, atexit, os
 import warnings
+import csv
 from .mpi_tools import proc_id, mpi_statistics_scalar
 from .serialization_utils import convert_json
 
@@ -76,18 +77,18 @@ class Logger:
     state of a training run, and the trained model.
     """
 
-    def __init__(self, output_dir=None, output_fname='progress.txt', exp_name=None):
+    def __init__(self, output_dir=None, output_fname='progress.csv', exp_name=None):
         """
         Initialize a Logger.
 
         Args:
-            output_dir (string): A directory for saving results to. If 
+            output_dir (string): A directory for saving results to. If
                 ``None``, defaults to a temp directory of the form
                 ``/tmp/experiments/somerandomnumber``.
 
-            output_fname (string): Name for the tab-separated-value file 
-                containing metrics logged throughout a training run. 
-                Defaults to ``progress.txt``. 
+            output_fname (string): Name for the CSV file
+                containing metrics logged throughout a training run.
+                Defaults to ``progress.csv``. 
 
             exp_name (string): Experiment name. If you run multiple training
                 runs and give them all the same ``exp_name``, the plotter
@@ -276,7 +277,7 @@ class Logger:
         """
         Write all of the diagnostics from the current iteration.
 
-        Writes both to stdout, and to the output file.
+        Writes both to stdout, and to the output file in CSV format.
         """
         if proc_id()==0:
             vals = []
@@ -293,9 +294,10 @@ class Logger:
                 vals.append(val)
             print("-"*n_slashes, flush=True)
             if self.output_file is not None:
+                csv_writer = csv.writer(self.output_file)
                 if self.first_row:
-                    self.output_file.write("\t".join(self.log_headers)+"\n")
-                self.output_file.write("\t".join(map(str,vals))+"\n")
+                    csv_writer.writerow(self.log_headers)
+                csv_writer.writerow(vals)
                 self.output_file.flush()
         self.log_current_row.clear()
         self.first_row=False
